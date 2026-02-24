@@ -22,3 +22,4 @@ A high-performance Streamlit application that uses **Google Earth Engine (GEE)**
    ```bash
    streamlit run app.py
    ```
+"# Solar_Suitability" 
