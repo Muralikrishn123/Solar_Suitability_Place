@@ -24,3 +24,4 @@ A high-performance Streamlit application that uses **Google Earth Engine (GEE)**
    ```
 "# Solar_Suitability" 
 "# Solar_Suitability" 
+"# Solar_Suitability_Place" 
