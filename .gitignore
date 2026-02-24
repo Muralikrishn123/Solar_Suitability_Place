@@ -1,0 +1,14 @@
+# Environments
+venv/
+env/
+.env
+
+# Python caching
+__pycache__/
+*.pyc
+
+# Local secrets / configs
+gee_project.txt
+
+# Streamlit config (if you add secrets later)
+.streamlit/secrets.toml
