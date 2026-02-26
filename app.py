@@ -432,7 +432,16 @@ def main():
         else:
             st.warning(f"⚠️ GEE not authenticated{(': ' + gee_err[:80]) if gee_err else ''}")
     with col_s3:
-        st.info("📅 Feb 24, 2026")
+        import random
+        facts = [
+            "☀️ The Sun produces enough energy in 1 hour to power Earth for a year.",
+            "🔋 Solar panels can produce electricity for 25-30 years.",
+            "🇮🇳 India has the world's 4th largest solar power capacity.",
+            "🛰️ Solar energy powers 99% of spacecraft and satellites.",
+            "� Modern solar cells were first developed in 1954.",
+            "🌍 Solar is the most abundant energy resource on our planet."
+        ]
+        st.info(random.choice(facts))
 
 
     st.divider()
