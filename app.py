@@ -162,15 +162,39 @@ def load_model():
 @st.cache_resource
 def init_gee():
     try:
-        # Check if project ID is saved
+        # ── Streamlit Cloud: read credentials from secrets ──
+        if "gee" in st.secrets:
+            import json, tempfile
+            gee_cfg = st.secrets["gee"]
+            creds = {
+                "refresh_token": gee_cfg["refresh_token"],
+                "redirect_uri":  gee_cfg.get("redirect_uri", "http://localhost:8085"),
+                "scopes": [
+                    "https://www.googleapis.com/auth/earthengine",
+                    "https://www.googleapis.com/auth/cloud-platform",
+                    "https://www.googleapis.com/auth/drive",
+                    "https://www.googleapis.com/auth/devstorage.full_control",
+                ],
+            }
+            # Write creds to a temp file earthengine-api can read
+            cred_dir = os.path.join(tempfile.gettempdir(), "earthengine")
+            os.makedirs(cred_dir, exist_ok=True)
+            cred_path = os.path.join(cred_dir, "credentials")
+            with open(cred_path, "w") as f:
+                json.dump(creds, f)
+            os.environ["EARTHENGINE_TOKEN_FILE"] = cred_path
+            ee.Initialize(project=gee_cfg.get("project_id", ""))
+            return True
+
+        # ── Local dev: read project ID from gee_project.txt ──
         if os.path.exists("gee_project.txt"):
             with open("gee_project.txt", "r") as f:
                 project_id = f.read().strip()
             if project_id:
                 ee.Initialize(project=project_id)
                 return True
-                
-        # Fallback to default
+
+        # Fallback
         ee.Initialize()
         return True
     except Exception as e:
