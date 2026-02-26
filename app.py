@@ -164,7 +164,7 @@ def init_gee():
     try:
         # ── Streamlit Cloud: read credentials from secrets ──
         if "gee" in st.secrets:
-            import json, tempfile
+            import json
             gee_cfg = st.secrets["gee"]
             creds = {
                 "refresh_token": gee_cfg["refresh_token"],
@@ -176,15 +176,15 @@ def init_gee():
                     "https://www.googleapis.com/auth/devstorage.full_control",
                 ],
             }
-            # Write creds to a temp file earthengine-api can read
-            cred_dir = os.path.join(tempfile.gettempdir(), "earthengine")
+            # Write creds to the standard location earthengine-api reads on Linux
+            home = os.path.expanduser("~")
+            cred_dir = os.path.join(home, ".config", "earthengine")
             os.makedirs(cred_dir, exist_ok=True)
             cred_path = os.path.join(cred_dir, "credentials")
             with open(cred_path, "w") as f:
                 json.dump(creds, f)
-            os.environ["EARTHENGINE_TOKEN_FILE"] = cred_path
             ee.Initialize(project=gee_cfg.get("project_id", ""))
-            return True
+            return True, ""
 
         # ── Local dev: read project ID from gee_project.txt ──
         if os.path.exists("gee_project.txt"):
@@ -192,13 +192,14 @@ def init_gee():
                 project_id = f.read().strip()
             if project_id:
                 ee.Initialize(project=project_id)
-                return True
+                return True, ""
 
         # Fallback
         ee.Initialize()
-        return True
+        return True, ""
     except Exception as e:
-        return False
+        return False, str(e)
+
 
 # Fetch GEE data for a point using reduceRegion for robust extraction
 def fetch_gee_data(lat, lon, month):
@@ -375,7 +376,7 @@ def main():
 
     # Load model and GEE
     model = load_model()
-    gee_ok = init_gee()
+    gee_ok, gee_err = init_gee()
 
     # Status indicators
     col_s1, col_s2, col_s3 = st.columns(3)
@@ -388,9 +389,10 @@ def main():
         if gee_ok:
             st.success("✅ GEE connected")
         else:
-            st.warning("⚠️ GEE not authenticated")
+            st.warning(f"⚠️ GEE not authenticated{(': ' + gee_err[:80]) if gee_err else ''}")
     with col_s3:
         st.info("📅 Feb 24, 2026")
+
 
     st.divider()
 
