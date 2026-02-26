@@ -1,5 +1,6 @@
 import streamlit as st
 import folium
+from folium import plugins
 import ee
 import pandas as pd
 import numpy as np
@@ -139,6 +140,42 @@ st.markdown("""
     [data-testid="stMetric"]:nth-child(1) { animation-delay: 0.1s; }
     [data-testid="stMetric"]:nth-child(2) { animation-delay: 0.2s; }
     [data-testid="stMetric"]:nth-child(3) { animation-delay: 0.3s; }
+
+    /* Sidebar Label Styling - Premium White */
+    [data-testid="stSidebar"] label p {
+        color: #ffffff !important;
+        font-weight: 600;
+        text-shadow: 0 0 5px rgba(255,255,255,0.1);
+    }
+    
+    /* Dark Theme for Folium Layer Control */
+    .leaflet-control-layers {
+        background: rgba(30, 33, 43, 0.9) !important;
+        color: #f1f5f9 !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 8px !important;
+        backdrop-filter: blur(8px) !important;
+    }
+    .leaflet-control-layers-overlays, .leaflet-control-layers-base {
+        padding: 5px !important;
+    }
+
+    /* Selectbox Styling for Visibility */
+    div[data-baseweb="select"] > div {
+        background-color: #1a1c24 !important;
+        color: #ffffff !important;
+        border-color: rgba(255,255,255,0.1) !important;
+    }
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] span {
+        color: #ffffff !important;
+    }
+    div[data-baseweb="popover"] ul {
+        background-color: #1a1c24 !important;
+        color: #ffffff !important;
+    }
+    div[data-baseweb="popover"] li:hover {
+        background-color: #2d3748 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -162,10 +199,14 @@ def load_model():
 @st.cache_resource
 def init_gee():
     try:
-        # ── Streamlit Cloud: read credentials from secrets ──
-        if "gee" in st.secrets:
+        # Check if secrets file exists (to avoid noisy Streamlit error on local dev)
+        secrets_file = os.path.join(".streamlit", "secrets.toml")
+        
+        # ── Streamlit Cloud / Local with Secrets ──
+        if os.path.exists(secrets_file) and "gee" in st.secrets:
             import json
             gee_cfg = st.secrets["gee"]
+            # ... (rest of the secrets logic)
             creds = {
                 "refresh_token": gee_cfg["refresh_token"],
                 "redirect_uri":  gee_cfg.get("redirect_uri", "http://localhost:8085"),
@@ -176,7 +217,6 @@ def init_gee():
                     "https://www.googleapis.com/auth/devstorage.full_control",
                 ],
             }
-            # Write creds to the standard location earthengine-api reads on Linux
             home = os.path.expanduser("~")
             cred_dir = os.path.join(home, ".config", "earthengine")
             os.makedirs(cred_dir, exist_ok=True)
@@ -194,11 +234,12 @@ def init_gee():
                 ee.Initialize(project=project_id)
                 return True, ""
 
-        # Fallback
+        # Fallback to default local authentication
         ee.Initialize()
         return True, ""
     except Exception as e:
         return False, str(e)
+
 
 
 # Fetch GEE data for a point using reduceRegion for robust extraction
@@ -409,6 +450,16 @@ def main():
         st.divider()
         use_gee = st.checkbox("Fetch live GEE data", value=gee_ok, disabled=not gee_ok,
                               help="Fetch real satellite data. Requires GEE authentication.")
+
+        with st.expander("🗺️ Map Settings", expanded=False):
+            basemap_style = st.selectbox(
+                "Basemap Style",
+                ["Satellite (Esri)", "Hybrid (Google)", "Terrain (OpenTopoMap)", "Road (OpenStreetMap)"],
+                index=0
+            )
+            map_zoom = st.slider("Zoom Level", 5, 18, 12)
+            show_radius = st.checkbox("Show 1 km radius", value=True)
+
         st.divider()
 
         if st.button("🔍 Predict Suitability", type="primary", use_container_width=True):
@@ -482,21 +533,106 @@ def main():
     with col_map:
         st.subheader("🗺️ Location Map")
         st.caption("🖱️ **Click anywhere on the map** to select coordinates!")
-        m = folium.Map(location=[st.session_state.lat, st.session_state.lon], zoom_start=9)
+
+        # Resolve map settings (defaults if expander not yet rendered)
+        _bstyle   = locals().get("basemap_style", "Satellite (Esri)")
+        _zoom     = locals().get("map_zoom", 12)
+        _radius   = locals().get("show_radius", True)
+
+        # Tile layer definitions
+        _tile_map = {
+            "Satellite (Esri)": (
+                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                "Esri World Imagery",
+                "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+            ),
+            "Hybrid (Google)": (
+                "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+                "Google Hybrid",
+                "Map data &copy; Google"
+            ),
+            "Terrain (OpenTopoMap)": (
+                "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+                "OpenTopoMap",
+                "Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)"
+            ),
+            "Road (OpenStreetMap)": (
+                "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                "OpenStreetMap",
+                "&copy; OpenStreetMap contributors"
+            ),
+        }
+        _tiles, _name, _attr = _tile_map[_bstyle]
+
+        m = folium.Map(
+            location=[st.session_state.lat, st.session_state.lon],
+            zoom_start=_zoom,
+            tiles=_tiles,
+            attr=_attr,
+            control_scale=True,
+        )
+
+        # Add a second satellite option as an extra layer for toggling
+        folium.TileLayer(
+            tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            attr="Esri",
+            name="Satellite (Esri)",
+            overlay=False,
+            control=True,
+        ).add_to(m)
+        folium.TileLayer(
+            tiles="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+            attr="Google",
+            name="Hybrid (Google)",
+            overlay=False,
+            control=True,
+        ).add_to(m)
+        folium.TileLayer(
+            tiles="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            attr="&copy; OpenStreetMap contributors",
+            name="Road (OSM)",
+            overlay=False,
+            control=True,
+        ).add_to(m)
+
+        # Styled marker with rich popup
         folium.Marker(
             location=[st.session_state.lat, st.session_state.lon],
-            popup=f"{st.session_state.lat:.4f}°N, {st.session_state.lon:.4f}°E"
+            popup=folium.Popup(
+                f"<b>📍 Selected Location</b><br>"
+                f"Lat: {st.session_state.lat:.4f}°N<br>"
+                f"Lon: {st.session_state.lon:.4f}°E",
+                max_width=200,
+            ),
+            tooltip=f"{st.session_state.lat:.4f}°N, {st.session_state.lon:.4f}°E",
+            icon=folium.Icon(color="red", icon="sun-o", prefix="fa"),
         ).add_to(m)
-        
+
+        # Optional 1 km radius circle
+        if _radius:
+            folium.Circle(
+                location=[st.session_state.lat, st.session_state.lon],
+                radius=1000,
+                color="#FF4500",
+                weight=2,
+                fill=True,
+                fill_color="#FF4500",
+                fill_opacity=0.08,
+                tooltip="1 km radius",
+            ).add_to(m)
+
+        folium.LayerControl(collapsed=True).add_to(m)
+        plugins.Geocoder(collapsed=True, position="topleft").add_to(m)
+
         # Render map using st_folium to capture click events
-        map_data = st_folium(m, width=650, height=450, key="interactive_map")
-        
+        map_data = st_folium(m, width=650, height=500, key="interactive_map")
+
         # Update coordinates on click
-        if map_data and map_data.get('last_clicked'):
-            clicked = map_data['last_clicked']
-            if clicked['lat'] != st.session_state.lat or clicked['lng'] != st.session_state.lon:
-                st.session_state.lat = clicked['lat']
-                st.session_state.lon = clicked['lng']
+        if map_data and map_data.get("last_clicked"):
+            clicked = map_data["last_clicked"]
+            if clicked["lat"] != st.session_state.lat or clicked["lng"] != st.session_state.lon:
+                st.session_state.lat = clicked["lat"]
+                st.session_state.lon = clicked["lng"]
                 st.rerun()
 
     with col_result:
