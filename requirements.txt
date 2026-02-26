@@ -1,6 +1,6 @@
 streamlit>=1.28.0
-geemap>=0.30.0
-python-box>=6.0.0,<7.0.0
+folium>=0.14.0
+streamlit-folium>=0.15.0
 earthengine-api>=0.1.360
 pandas>=1.5.0
 numpy>=1.23.0
