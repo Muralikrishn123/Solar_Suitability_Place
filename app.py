@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import os
 import time
 from streamlit_folium import st_folium
+from datetime import datetime
 
 # Page config
 st.set_page_config(
@@ -432,16 +433,10 @@ def main():
         else:
             st.warning(f"⚠️ GEE not authenticated{(': ' + gee_err[:80]) if gee_err else ''}")
     with col_s3:
-        import random
-        facts = [
-            "☀️ The Sun produces enough energy in 1 hour to power Earth for a year.",
-            "🔋 Solar panels can produce electricity for 25-30 years.",
-            "🇮🇳 India has the world's 4th largest solar power capacity.",
-            "🛰️ Solar energy powers 99% of spacecraft and satellites.",
-            "� Modern solar cells were first developed in 1954.",
-            "🌍 Solar is the most abundant energy resource on our planet."
-        ]
-        st.info(random.choice(facts))
+        now = datetime.now()
+        cur_time = now.strftime("%I:%M %p")
+        cur_date = now.strftime("%b %d, %Y")
+        st.info(f"🕒 **{cur_time}** · {cur_date}")
 
 
     st.divider()
@@ -467,7 +462,8 @@ def main():
                 index=0
             )
             map_zoom = st.slider("Zoom Level", 5, 18, 12)
-            show_radius = st.checkbox("Show 1 km radius", value=True)
+            radius_km = st.slider("Selection Radius (km)", 0.5, 10.0, 1.0, 0.5, help="Update the visualization radius on the map")
+            show_radius = st.checkbox("Show radius circle", value=True)
 
         st.divider()
 
@@ -619,15 +615,16 @@ def main():
 
         # Optional 1 km radius circle
         if _radius:
+            _r_val = locals().get("radius_km", 1.0)
             folium.Circle(
                 location=[st.session_state.lat, st.session_state.lon],
-                radius=1000,
+                radius=_r_val * 1000,
                 color="#FF4500",
                 weight=2,
                 fill=True,
                 fill_color="#FF4500",
                 fill_opacity=0.08,
-                tooltip="1 km radius",
+                tooltip=f"{_r_val} km radius",
             ).add_to(m)
 
         folium.LayerControl(collapsed=True).add_to(m)
@@ -702,17 +699,24 @@ def main():
                 st.markdown("<h4 style='text-align:center;'>📡 Live Satellite Data (GEE)</h4>", unsafe_allow_html=True)
                 
                 # Render beautifully in pure Streamlit metric cards
+                def fmt(val, precision=2):
+                    if val is None: return "0"
+                    try:
+                        return f"{float(val):.{precision}f}"
+                    except:
+                        return "0"
+
                 m1, m2, m3 = st.columns(3)
-                m1.metric("☀️ Solar Irradiance", f"{data.get('solar_irradiance', 0):.2f}", "kWh/m²/day", delta_color="off")
-                m2.metric("⛰️ Elevation", f"{data.get('elevation', 0):.0f}", "meters", delta_color="off")
-                m3.metric("🌡️ Temperature", f"{data.get('temperature_c', 0):.1f}", "°C", delta_color="off")
+                m1.metric("☀️ Solar Irradiance", fmt(data.get('solar_irradiance'), 2), "kWh/m²/day", delta_color="off")
+                m2.metric("⛰️ Elevation", fmt(data.get('elevation'), 0), "meters", delta_color="off")
+                m3.metric("🌡️ Temperature", fmt(data.get('temperature_c'), 1), "°C", delta_color="off")
                 
                 st.write("") # Spacer
                 
                 m4, m5, m6 = st.columns(3)
-                m4.metric("🌿 NDVI (Vegetation)", f"{data.get('ndvi', 0):.2f}", "Index", delta_color="off")
-                m5.metric("📐 Terrain Slope", f"{data.get('slope', 0):.1f}", "°", delta_color="off")
-                m6.metric("🧭 Coordinates", f"{data.get('lat', 0):.2f}°", f"{data.get('lon', 0):.2f}°", delta_color="off")
+                m4.metric("🌿 NDVI (Vegetation)", fmt(data.get('ndvi'), 2), "Index", delta_color="off")
+                m5.metric("📐 Terrain Slope", fmt(data.get('slope'), 1), "°", delta_color="off")
+                m6.metric("🧭 Coordinates", f"{fmt(data.get('lat'), 2)}°", f"{fmt(data.get('lon'), 2)}°", delta_color="off")
 
         else:
             st.info("👈 Select a location in the Sidebar or Map, then click **Predict Suitability**.")
