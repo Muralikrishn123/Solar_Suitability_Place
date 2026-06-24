@@ -196,52 +196,27 @@ def load_model():
         return None
     return joblib.load(model_path)
 
-# Initialize GEE
+# ============================================================
+# FIXED: Initialize GEE - SIMPLIFIED FOR STREAMLIT CLOUD
+# ============================================================
 @st.cache_resource
 def init_gee():
     try:
-        # Check if secrets file exists (to avoid noisy Streamlit error on local dev)
-        secrets_file = os.path.join(".streamlit", "secrets.toml")
-        
-        # ── Streamlit Cloud / Local with Secrets ──
-        if os.path.exists(secrets_file) and "gee" in st.secrets:
-            import json
-            gee_cfg = st.secrets["gee"]
-            # ... (rest of the secrets logic)
-            creds = {
-                "refresh_token": gee_cfg["refresh_token"],
-                "redirect_uri":  gee_cfg.get("redirect_uri", "http://localhost:8085"),
-                "scopes": [
-                    "https://www.googleapis.com/auth/earthengine",
-                    "https://www.googleapis.com/auth/cloud-platform",
-                    "https://www.googleapis.com/auth/drive",
-                    "https://www.googleapis.com/auth/devstorage.full_control",
-                ],
-            }
-            home = os.path.expanduser("~")
-            cred_dir = os.path.join(home, ".config", "earthengine")
-            os.makedirs(cred_dir, exist_ok=True)
-            cred_path = os.path.join(cred_dir, "credentials")
-            with open(cred_path, "w") as f:
-                json.dump(creds, f)
-            ee.Initialize(project=gee_cfg.get("project_id", ""))
+        # Check if running on Streamlit Cloud with secrets
+        if 'gee' in st.secrets:
+            credentials = ee.credentials.RefreshTokenCredentials(
+                token=st.secrets["gee"]["refresh_token"],
+                project_id=st.secrets["gee"]["project_id"]
+            )
+            ee.Initialize(credentials)
             return True, ""
-
-        # ── Local dev: read project ID from gee_project.txt ──
-        if os.path.exists("gee_project.txt"):
-            with open("gee_project.txt", "r") as f:
-                project_id = f.read().strip()
-            if project_id:
-                ee.Initialize(project=project_id)
-                return True, ""
-
-        # Fallback to default local authentication
+        
+        # Local development fallback
         ee.Initialize()
         return True, ""
+        
     except Exception as e:
         return False, str(e)
-
-
 
 # Fetch GEE data for a point using reduceRegion for robust extraction
 def fetch_gee_data(lat, lon, month):
@@ -437,7 +412,6 @@ def main():
         cur_time = now.strftime("%I:%M %p")
         cur_date = now.strftime("%b %d, %Y")
         st.info(f"🕒 **{cur_time}** · {cur_date}")
-
 
     st.divider()
 
